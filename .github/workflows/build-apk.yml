@@ -15,11 +15,13 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Install Android platform
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Check game rules
+        run: node tests/game-rules.cjs
       - name: Build APK and lint
         run: gradle --no-daemon :app:assembleDebug :app:lintDebug
       - uses: actions/upload-artifact@v4
