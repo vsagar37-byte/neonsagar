@@ -1,0 +1,66 @@
+<!DOCTYPE html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Neon Switch</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#080d19;color:#eef4ff;font-family:system-ui,sans-serif}.app{max-width:460px;margin:auto;padding:14px}button{font:inherit;cursor:pointer;border:0;border-radius:12px;background:#20354e;color:#eef4ff;padding:12px;font-weight:700}button:focus-visible{outline:2px solid #fff}.head,.stats,.bar,.tabs{display:flex;justify-content:space-between;gap:8px}.head{align-items:center}.brand{font-size:24px;font-weight:900}.brand span{color:#6fffd2}small{color:#9bafcb;font-size:11px}.stats{margin:13px 0}.stat{flex:1;background:#142239;border-radius:14px;padding:10px}label{font-size:10px;color:#a1b6d1;display:block}.stat b{font-size:25px}.bar{font-size:10px;color:#b1c6df;margin-bottom:10px}.arena{height:52vh;min-height:260px;position:relative;border:1px solid #34506a;border-radius:20px;overflow:hidden;touch-action:none}canvas{display:block;width:100%;height:100%}.overlay{position:absolute;inset:0;background:#081321ed;display:flex;align-items:center;justify-content:center;text-align:center;padding:18px;overflow:auto}.card{width:100%}h1{font-size:33px;line-height:1.1;margin:12px 0}p{color:#b3c4db;font-size:13px;line-height:1.6}.eyebrow{color:#6fffd2;font-size:10px;letter-spacing:2px}.primary{background:#6fffd2;color:#083129;width:100%;margin-top:9px;padding:15px}.secondary{width:100%;margin-top:8px}.switch{width:100%;padding:17px;margin:10px 0}.tabs button{flex:1;font-size:12px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.skin{border:1px solid #48617e;padding:15px}.swatch{width:25px;height:25px;margin:0 auto 7px;border-radius:7px}.note{text-align:center;font-size:10px;color:#829cba;margin:12px 0}[hidden]{display:none!important}
+</style>
+<div class="app"><div class="head"><div class="brand">NEON <span>SWITCH</span><br><small>ONE TAP. TWO LANES.</small></div><div><button id="sound" aria-label="Toggle sound">♪ Off</button> <button id="pause" aria-label="Pause">Ⅱ</button></div></div>
+<div class="stats"><div class="stat"><label>SCORE</label><b id="score">0</b></div><div class="stat"><label>BEST</label><b id="best">0</b></div><div class="stat"><label>GEMS</label><b id="wallet">0</b></div></div><div class="bar"><span id="level"></span><span id="combo"></span><span id="shield"></span></div>
+<div class="arena" id="arena"><canvas id="game" aria-label="Tap to switch lanes, dodge pink blocks and collect gold gems"></canvas><div class="overlay" id="overlay"><div class="card" id="card"></div></div></div>
+<button class="switch" id="switch">TAP TO SWITCH ⇄</button><div class="tabs"><button id="shop">Character colors</button><button id="daily">Daily challenge</button></div><div class="note">Offline arcade · No ads · No purchases<br>Pink: dodge · Gold: gems · Blue: shield</div></div>
+<script>
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id),c=$('game'),g=c.getContext('2d');
+const palette=[['Mint','#6fffd2',0],['Sunset','#ffac72',50],['Violet','#bd9bff',100],['Ice','#7cdcff',150]];
+const day=()=>{const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()};
+let data={best:0,wallet:0,owned:[0],selected:0,sound:false,daily:{date:day(),gems:0,claimed:false}};
+try{const v=JSON.parse(localStorage.getItem('neonSwitchArcadeV2'));if(v){data.best=Math.max(0,Math.floor(Number(v.best)||0));data.wallet=Math.max(0,Math.floor(Number(v.wallet)||0));data.owned=Array.isArray(v.owned)?v.owned.filter(n=>Number.isInteger(n)&&n>=0&&n<4):[0];if(!data.owned.includes(0))data.owned.push(0);data.selected=data.owned.includes(v.selected)?v.selected:0;data.sound=!!v.sound;if(v.daily&&v.daily.date===day())data.daily={date:day(),gems:Math.max(0,Number(v.daily.gems)||0),claimed:!!v.daily.claimed}}}catch{}
+const save=()=>{try{localStorage.setItem('neonSwitchArcadeV2',JSON.stringify(data))}catch{}};
+function refreshDay(){if(data.daily.date!==day())data.daily={date:day(),gems:0,claimed:false}}
+let audio;function tone(f,len=.07){if(!data.sound)return;try{audio=audio||new(window.AudioContext||window.webkitAudioContext)();audio.resume();let o=audio.createOscillator(),a=audio.createGain();o.frequency.value=f;a.gain.setValueAtTime(.045,audio.currentTime);a.gain.exponentialRampToValueAtTime(.001,audio.currentTime+len);o.connect(a);a.connect(audio.destination);o.start();o.stop(audio.currentTime+len)}catch{}}
+let w=360,h=450,state='home',returnTo='home',lane=0,px=108,items=[],particles=[],time=0,spawn=.8,score=0,runGems=0,chain=0,maxChain=0,shield=false,grace=0,last=0,oldBest=0;
+const x=n=>w*(n===0?.3:.7),y=()=>h-52;
+function resize(){const r=$('arena').getBoundingClientRect();w=r.width;h=r.height;const d=Math.min(window.devicePixelRatio||1,2);c.width=w*d;c.height=h*d;g.setTransform(d,0,0,d,0,0);px=x(lane)}
+new ResizeObserver(resize).observe($('arena'));
+function hud(){$('score').textContent=score;$('best').textContent=data.best;$('wallet').textContent=data.wallet;$('level').textContent='LEVEL '+Math.min(10,1+Math.floor(time/15));$('combo').textContent='COMBO ×'+Math.min(4,1+Math.floor(chain/3));$('shield').textContent=shield?'◆ SHIELD ON':'◇ NO SHIELD';$('sound').textContent=data.sound?'♪ On':'♪ Off'}
+function panel(html){$('card').innerHTML=html;$('overlay').hidden=false}
+function home(){state='home';panel('<div class="eyebrow">JOKU ARCADE</div><h1>Find your flow.</h1><p>Switch lanes. Dodge blocks.<br>Chain gems. Catch shields.</p><button class="primary" data-action="start">PLAY →</button><p>Gems unlock new colors.<br>Your progress saves automatically.</p>')}
+function start(){refreshDay();state='playing';lane=0;px=x(0);items=[];particles=[];time=0;spawn=.85;score=0;runGems=0;chain=0;maxChain=0;shield=false;grace=0;oldBest=data.best;$('overlay').hidden=true;hud();tone(440)}
+function resume(){state='playing';$('overlay').hidden=true}
+function pause(){if(state!=='playing')return;state='paused';if(audio)audio.suspend().catch(()=>{});panel('<div class="eyebrow">PAUSED</div><h1>Catch your breath.</h1><p>Your run is waiting.</p><button class="primary" data-action="resume">RESUME →</button><button class="secondary" data-action="end">END RUN</button>')}
+window.pauseGame=pause;
+function end(){state='over';data.best=Math.max(data.best,score);save();hud();tone(140,.2);panel('<div class="eyebrow">'+(score>oldBest?'NEW PERSONAL BEST':'ROUND COMPLETE')+'</div><h1>'+score+' points</h1><p>Gems earned: '+runGems+'<br>Best gem streak: '+maxChain+'<br>Personal best: '+data.best+'</p><button class="primary" data-action="start">PLAY AGAIN →</button><button class="secondary" data-action="home">MAIN MENU</button>')}
+function switchLane(){if(state==='playing'){lane=1-lane;tone(280,.035)}}
+function showShop(){panel('<div class="eyebrow">CHARACTER COLORS</div><h1>Choose your glow.</h1><p>'+data.wallet+' gems available</p><div class="grid">'+palette.map((s,i)=>'<button class="skin" data-skin="'+i+'" '+(data.selected===i?'style="border-color:#6fffd2"':'')+'><div class="swatch" style="background:'+s[1]+'"></div>'+s[0]+'<br><small>'+(data.selected===i?'Selected':data.owned.includes(i)?'Select':s[2]+' gems')+'</small></button>').join('')+'</div><p id="shopnote" aria-live="polite">Cosmetic colors. Same game for everyone.</p><button class="secondary" data-action="back">BACK</button>')}
+function showDaily(){refreshDay();panel('<div class="eyebrow">DAILY CHALLENGE</div><h1>Collect 30 gems.</h1><p>'+Math.min(30,data.daily.gems)+' / 30 collected today<br>Reward: 25 bonus gems<br>Resets on your next local calendar day.</p><button class="primary" data-action="claim" '+(data.daily.gems<30||data.daily.claimed?'disabled style="opacity:.5"':'')+'>'+(data.daily.claimed?'CLAIMED':data.daily.gems>=30?'CLAIM 25 GEMS':'KEEP COLLECTING')+'</button><button class="secondary" data-action="back">BACK</button>')}
+function openMenu(which){if(state==='playing')pause();if(state!=='shop'&&state!=='daily')returnTo=state==='paused'?'paused':state==='over'?'over':'home';state=which;which==='shop'?showShop():showDaily()}
+$('card').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.skin!==undefined){let i=Number(b.dataset.skin);if(!data.owned.includes(i)){if(data.wallet<palette[i][2]){$('shopnote').textContent='Collect '+(palette[i][2]-data.wallet)+' more gems.';return}data.wallet-=palette[i][2];data.owned.push(i)}data.selected=i;save();hud();showShop();return}
+switch(b.dataset.action){case 'start':start();break;case 'resume':resume();break;case 'end':end();break;case 'home':home();break;case 'back':if(returnTo==='paused'){state='playing';pause()}else if(returnTo==='over')end();else home();break;case 'claim':refreshDay();if(data.daily.gems>=30&&!data.daily.claimed){data.daily.claimed=true;data.wallet+=25;save();hud()}showDaily();break}};
+$('shop').onclick=()=>openMenu('shop');$('daily').onclick=()=>openMenu('daily');
+$('sound').onclick=()=>{data.sound=!data.sound;save();hud();tone(700)};
+$('pause').onclick=()=>state==='paused'?resume():pause();
+$('switch').onpointerdown=e=>{e.preventDefault();switchLane()};
+$('arena').onpointerdown=e=>{if(e.target===c){e.preventDefault();switchLane()}};
+addEventListener('keydown',e=>{if(['Space','ArrowLeft','ArrowRight'].includes(e.code)){e.preventDefault();if(e.repeat)return;if(state==='playing')switchLane();else if(state==='paused')resume();else if(state==='home'||state==='over')start()}if(e.code==='KeyP'||e.code==='Escape')pause()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)pause()});
+function burst(xx,yy,col){for(let i=0;i<12;i++)particles.push({x:xx,y:yy,vx:(Math.random()-.5)*220,vy:(Math.random()-.5)*220,life:.5,col})}
+function update(dt){
+time+=dt;grace=Math.max(0,grace-dt);spawn-=dt;
+const speed=Math.min(390,185+time*2.5);
+if(spawn<=0){spawn+=Math.max(.72,1.17-time*.004);const side=Math.random()<.5?0:1;items.push({lane:side,y:-35,type:'block'});const r=Math.random();if(r<.68)items.push({lane:1-side,y:-35,type:'gem'});else if(r<.79&&!shield&&!items.some(a=>a.type==='shield'))items.push({lane:1-side,y:-35,type:'shield'})}
+for(const a of items){a.y+=speed*dt;if(a.removed)continue;
+if(a.lane===lane&&Math.abs(a.y-y())<(a.type==='block'?29:27)){
+if(a.type==='block'){if(grace>0){a.removed=true;continue}if(shield){shield=false;grace=.65;a.removed=true;burst(x(lane),y(),'#7cdcff');tone(220,.13)}else{burst(x(lane),y(),'#ff6b88');end();return}}
+else if(a.type==='gem'){a.removed=true;chain++;maxChain=Math.max(chain,maxChain);score+=5*Math.min(4,1+Math.floor(chain/3));runGems++;data.wallet++;refreshDay();data.daily.gems++;save();tone(500+Math.min(chain,12)*40);burst(x(lane),a.y,'#ffd67c')}
+else{a.removed=true;shield=true;tone(900,.12);burst(x(lane),a.y,'#7cdcff')}}
+if(!a.passed&&a.y>y()+36){a.passed=true;if(a.type==='block')score++;else if(a.type==='gem'&&!a.removed)chain=0}}
+items=items.filter(a=>!a.removed&&a.y<h+45);hud()}
+function rect(xx,yy,ww,hh,r){g.beginPath();g.moveTo(xx+r,yy);g.arcTo(xx+ww,yy,xx+ww,yy+hh,r);g.arcTo(xx+ww,yy+hh,xx,yy+hh,r);g.arcTo(xx,yy+hh,xx,yy,r);g.arcTo(xx,yy,xx+ww,yy,r);g.closePath();g.fill()}
+function draw(dt,t){g.fillStyle='#101b2e';g.fillRect(0,0,w,h);for(let i=0;i<2;i++){g.fillStyle='#15253a';g.fillRect(x(i)-w*.145,0,w*.29,h)}g.strokeStyle='#2b415b';g.setLineDash([7,16]);g.lineDashOffset=-(time*90)%23;g.beginPath();g.moveTo(w/2,0);g.lineTo(w/2,h);g.stroke();g.setLineDash([]);
+for(const a of items){g.save();g.translate(x(a.lane),a.y);const col=a.type==='block'?'#ff6b88':a.type==='gem'?'#ffd67c':'#7cdcff';g.fillStyle=col;g.shadowColor=col;g.shadowBlur=16;
+if(a.type==='block'){rect(-23,-15,46,30,7);g.fillStyle='#ffe4eb';g.fillRect(-12,-3,24,3)}else if(a.type==='gem'){g.rotate(Math.PI/4);g.fillRect(-9,-9,18,18)}else{g.strokeStyle=col;g.lineWidth=3;g.beginPath();g.arc(0,0,14,0,Math.PI*2);g.stroke();g.fillRect(-5,-5,10,10)}g.restore()}
+if(state==='playing')px+=(x(lane)-px)*Math.min(1,dt*24);g.save();g.translate(px,y());if(shield){g.strokeStyle='#7cdcff';g.lineWidth=2;g.beginPath();g.arc(0,0,27,0,Math.PI*2);g.stroke()}if(grace>0)g.globalAlpha=.5+Math.sin(t*.03)*.25;g.fillStyle=palette[data.selected][1];g.shadowColor=g.fillStyle;g.shadowBlur=22;rect(-15,-16,30,32,9);g.shadowBlur=0;g.fillStyle='#15243b';g.fillRect(-7,-5,4,5);g.fillRect(3,-5,4,5);g.restore();
+for(const p of particles){if(state==='playing'||state==='over'){p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt}g.globalAlpha=Math.max(0,p.life*2);g.fillStyle=p.col;g.fillRect(p.x,p.y,4,4)}g.globalAlpha=1;particles=particles.filter(p=>p.life>0)}
+function frame(t){const dt=Math.min(.033,(t-last)/1000||0);last=t;if(state==='playing')update(dt);draw(dt,t);requestAnimationFrame(frame)}
+resize();hud();home();requestAnimationFrame(frame);
+})();
+</script></html>
