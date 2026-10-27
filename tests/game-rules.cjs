@@ -20,7 +20,7 @@ check('purchase deducts gems and unlocks color',()=>{t.set({wallet:70});t.click(
 check('insufficient funds cannot purchase',()=>{t.set({wallet:0});t.click({skin:'3'});assert.equal(t.get().data.selected,1);assert(!t.get().data.owned.includes(3))});
 
 check('difficulty selection changes game and persists',()=>{t.click({action:'home'});t.click({mode:'hard'});assert.equal(t.get().data.mode,'hard');assert.equal(JSON.parse(storage.get('neonSwitchArcadeV2')).mode,'hard');assert(t.settingsAt('hard',0).speed>t.settingsAt('medium',0).speed);assert(t.settingsAt('medium',0).speed>t.settingsAt('easy',0).speed)});
-check('levels advance every 15 seconds and cap at 30',()=>{assert.equal(t.levelAt(0),1);assert.equal(t.levelAt(15),2);assert.equal(t.levelAt(435),30);assert.equal(t.levelAt(9999),30)});
-check('difficulty increases with level',()=>{for(const mode of ['easy','medium','hard']){assert(t.settingsAt(mode,435).speed>t.settingsAt(mode,0).speed);assert(t.settingsAt(mode,435).interval<t.settingsAt(mode,0).interval)}});
+check('levels advance every 15 seconds and cap at 50',()=>{assert.equal(t.levelAt(0),1);assert.equal(t.levelAt(15),2);assert.equal(t.levelAt(735),50);assert.equal(t.levelAt(9999),50)});
+check('difficulty increases with level',()=>{for(const mode of ['easy','medium','hard']){assert(t.settingsAt(mode,735).speed>t.settingsAt(mode,0).speed);assert(t.settingsAt(mode,735).interval<t.settingsAt(mode,0).interval)}});
 check('high scores are separate by difficulty',()=>{t.click({action:'home'});t.click({mode:'easy'});t.start();t.set({items:item('gem')});t.update(0);t.click({action:'end'});assert.equal(t.get().data.bests.easy,5);assert.equal(t.get().data.bests.hard,0)});
 console.log(count+' game-rule checks passed. Android compilation/device tests not run.');
